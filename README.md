@@ -1,4 +1,5 @@
 # Digital Oil Lamp Yathra
+<img width="1536" height="1024" alt="34852f91-86ea-4d0a-861e-32cf7b278e46" src="https://github.com/user-attachments/assets/cc50461a-9095-4765-9e06-b993272ad494" />
 
 A smart ceremonial lamp control system built around an ESP32 web interface and an Arduino Mega controller. This project is designed to control 20 lamps using a web page, OLED status display, and serial communication between the ESP32 and Mega.
 
