@@ -132,22 +132,4 @@ Common issues to verify:
 - Avoid powering inductive loads directly without suitable relay protection.
 - Verify relay module wiring before running the finale sequence.
 
-## License
 
-This repository does not currently include a license file. If you plan to distribute or reuse this project, add a suitable open-source license based on your intended usage.
-
-## Project Status
-
-This is a custom embedded hardware project for ceremonial lighting control and is intended for personal or installation-specific use. The firmware and documentation are tailored to the Yathra 2026 lighting setup and the accompanying hardware layout.
-
-## Contributing
-
-Contributions, bug fixes, and hardware improvements are welcome. If you modify the project, document your changes clearly and keep the wiring guide updated alongside the firmware.
-
-## Contact
-
-For project-specific questions, refer to the repository owner or the hardware notes included in this project.
-
----
-
-This README is intended to help users understand the project structure, hardware wiring, and control workflow quickly.
