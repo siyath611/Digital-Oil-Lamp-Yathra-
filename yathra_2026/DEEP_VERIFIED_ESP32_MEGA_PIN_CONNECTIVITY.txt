@@ -1,0 +1,137 @@
+DEEP PIN CONNECTIVITY & TROUBLESHOOTING GUIDE
+PROJECT: YATHRA 2026 (ESP32 + ARDUINO MEGA + OLED + 20 LAMPS + RELAY)
+======================================================================
+
+This guide documents the pin mapping, dual-serial support, and step-by-step
+diagnostics to guarantee that your 20 LEDs/lamps operate reliably.
+
+
+======================================================================
+1. SERIAL CONNECTION (DUAL PORT SUPPORT)
+======================================================================
+
+The Arduino Mega code now simultaneously listens on BOTH serial interfaces:
+
+OPTION A (RECOMMENDED - Hardware Serial1):
+  ESP32 GPIO 19 (TX)  ----->  Arduino Mega Pin 19 (RX1)
+  ESP32 GPIO 18 (RX)  <-----  Arduino Mega Pin 18 (TX1) [via level shifter / 1k:2k divider]
+  ESP32 GND           ------  Arduino Mega GND
+
+OPTION B (LEGACY - SoftwareSerial):
+  ESP32 GPIO 19 (TX)  ----->  Arduino Mega Pin 10 (RX)
+  ESP32 GPIO 18 (RX)  <-----  Arduino Mega Pin 11 (TX) [via level shifter / 1k:2k divider]
+  ESP32 GND           ------  Arduino Mega GND
+
+*** CRITICAL WIRING RULES ***
+1. GND TO GND: ESP32 GND and Arduino Mega GND MUST be connected together with a jumper wire.
+   Without a shared GND, serial data cannot be recognized!
+2. TX TO RX: Always connect Transmitter (TX) to Receiver (RX). Never TX-to-TX.
+
+
+======================================================================
+2. ESP32 OLED CONNECTION (I2C)
+======================================================================
+
+ESP32 GPIO 21  ->  OLED SDA
+ESP32 GPIO 22  ->  OLED SCL
+ESP32 3.3V     ->  OLED VCC
+ESP32 GND      ->  OLED GND
+I2C Address:       0x3C
+
+
+======================================================================
+3. RELAY CONNECTION (MEGA PIN 4)
+======================================================================
+
+Mega Pin 4  ->  Relay Module IN
+Mega GND    ->  Relay Module GND
+5V Supply   ->  Relay Module VCC
+
+Configuration: Active-LOW (RELAY_ON = LOW, RELAY_OFF = HIGH).
+Behavior:
+- Turns ON when the first lamp is turned ON (engages master power).
+- Turns OFF when all lamps are turned OFF.
+
+
+======================================================================
+4. 20 BUTTON / LAMP OUTPUT PINS (MEGA)
+======================================================================
+
+The Yathra project maps buttons 1 to 20 to the following exact Mega pins:
+
+ Button #  | Mega Pin | Description
+-----------+----------+----------------------------
+ Button 01 | Pin 53   | 1st Button (Lamp 1 Output)
+ Button 02 | Pin 51   | 2nd Button (Lamp 2 Output)
+ Button 03 | Pin 49   | 3rd Button (Lamp 3 Output)
+ Button 04 | Pin 47   | 4th Button (Lamp 4 Output)
+ Button 05 | Pin 45   | 5th Button (Lamp 5 Output)
+ Button 06 | Pin 43   | 6th Button (Lamp 6 Output)
+ Button 07 | Pin 41   | 7th Button (Lamp 7 Output)
+ Button 08 | Pin 39   | 8th Button (Lamp 8 Output)
+ Button 09 | Pin 37   | 9th Button (Lamp 9 Output)
+ Button 10 | Pin 35   | 10th Button (Lamp 10 Output)
+ Button 11 | Pin 33   | 11th Button (Lamp 11 Output)
+ Button 12 | Pin 31   | 12th Button (Lamp 12 Output)
+ Button 13 | Pin 52   | 13th Button (Lamp 13 Output)
+ Button 14 | Pin 50   | 14th Button (Lamp 14 Output)
+ Button 15 | Pin 48   | 15th Button (Lamp 15 Output)
+ Button 16 | Pin 46   | 16th Button (Lamp 16 Output)
+ Button 17 | Pin 44   | 17th Button (Lamp 17 Output)
+ Button 18 | Pin 42   | 18th Button (Lamp 18 Output)
+ Button 19 | Pin 40   | 19th Button (Lamp 19 Output)
+ Button 20 | Pin 38   | 20th Button (Lamp 20 Output)
+
+
+======================================================================
+5. BUILT-IN DIAGNOSTICS & TESTING INSTRUCTIONS
+======================================================================
+
+We have added 3 diagnostic features to quickly pinpoint any issue:
+
+TEST 1: Power-On Self-Test (POST)
+- Every time the Arduino Mega powers up or resets, it immediately chases
+  through all 20 LEDs for 60ms each (Pin 53 -> 51 -> 49 ... -> 38).
+- WHAT IT TELLS YOU:
+  * If an LED flashes during boot: That LED, resistor, wire, and pin are 100% OK!
+  * If an LED does NOT flash: The LED is inserted backwards (check anode/cathode),
+    has a loose wire, or has a broken resistor.
+
+TEST 2: Direct PC Serial Monitor Testing (Without ESP32)
+- Connect Arduino Mega to PC via USB cable.
+- Open Arduino IDE -> Tools -> Serial Monitor (set baud rate to 9600, "Newline").
+- Type any of the following commands and hit Enter:
+  * 1:ON     -> Turns on Button 1 (Pin 53)
+  * 1:OFF    -> Turns off Button 1 (Pin 53)
+  * ALL:ON   -> Turns on all 20 LEDs
+  * ALL:OFF  -> Turns off all 20 LEDs
+  * TEST     -> Reruns the 20-LED chase sequence
+- If typing "1:ON" turns on the LED: You know the Mega hardware is working 100%,
+  and you only need to check the ESP32-to-Mega TX/RX wiring.
+
+TEST 3: Live Serial Logging
+- While Mega is connected to Serial Monitor, click a button on the ESP32 webpage.
+- You will see live output showing which port received the command:
+  e.g.: [Hardware Serial1 (Pin 19 RX1)] Received: '1:ON'
+        >> Lamp 1 (Mega Pin 53) turned ON
+- If nothing prints when you click a button on the webpage:
+  * Check that ESP32 and Mega share a COMMON GND.
+  * Check that ESP32 GPIO 19 is plugged into Mega Pin 19 (RX1) or Pin 10.
+
+
+======================================================================
+6. GRAND FINALE CEREMONY FLOW
+======================================================================
+
+When all 20 lamps have been turned ON (either through the webpage or by typing
+"ALL:ON" / "CEREMONY" in the Serial Monitor), the Grand Finale runs automatically:
+
+Stage 1: All 20 LEDs and Relay (Pin 4) remain solidly ON for 10 seconds.
+Stage 2: Blackout -> All 20 LEDs and Relay (Pin 4) turn OFF for 4 seconds.
+Stage 3: Progressive Lighting -> All 20 LEDs automatically turn ON one by one
+         with 500ms delay in the exact pin order:
+         53 -> 51 -> 49 -> 47 -> 45 -> 43 -> 41 -> 39 -> 37 -> 35 ->
+         33 -> 31 -> 52 -> 50 -> 48 -> 46 -> 44 -> 42 -> 40 -> 38.
+Stage 4: Finally, Relay Pin 4 turns ON!
+         All lamps and master relay remain ON to conclude the ceremony.
+
