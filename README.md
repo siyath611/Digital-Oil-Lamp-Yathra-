@@ -38,7 +38,7 @@ The project files are stored in the `yathra_2026/` directory:
 The project uses an ESP32 and Arduino Mega together:
 
 - ESP32 Wi-Fi access point: `TECH_B`
-- ESP32 password: `12345678`
+- ESP32 password: `#######`
 - ESP32 GPIO 21 → OLED SDA
 - ESP32 GPIO 22 → OLED SCL
 - ESP32 GPIO 19 / GPIO 18 used for serial communication to Mega
