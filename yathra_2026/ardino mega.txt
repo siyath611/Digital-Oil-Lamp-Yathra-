@@ -1,0 +1,365 @@
+// Project: Yathra
+// Target Board: Arduino Mega 2560
+// Supports:
+//   - Hardware Serial1: Pin 19 (RX1), Pin 18 (TX1) [RECOMMENDED for ESP32 connection]
+//   - SoftwareSerial:   Pin 10 (RX),  Pin 11 (TX)  [Compatible with legacy wiring]
+//   - USB Serial:       PC Serial Monitor (9600 baud) for direct testing
+
+#include <SoftwareSerial.h>
+SoftwareSerial mySerial(10, 11);  // Legacy SoftwareSerial (RX=10, TX=11)
+
+// 20 Pins in requested order: 53 is 1st button, 51 is 2nd, etc.
+const int ledPins[] = {53, 51, 49, 47, 45, 43, 41, 39, 37, 35, 33, 31, 52, 50, 48, 46, 44, 42, 40, 38};
+const int numToggles = 20;
+bool ledStates[numToggles] = {false};
+
+// --- Relay setup ---
+const int relayPin = 4;           // Free pin for relay module
+const int RELAY_ON  = LOW;        // Most relay modules are active-LOW
+const int RELAY_OFF = HIGH;       // Flip these two if yours is active-HIGH
+bool relayState = false;          // Tracks whether relay is currently ON
+
+String inputString = "";          // Buffer for incoming serial message
+bool stringComplete = false;      // Flag when a full command is received
+String activePort = "";           // Tracks which port received the command
+bool ceremonyRunning = false;     // Guard flag to prevent re-entrant ceremony calls
+
+// Function to blink the LED with a pattern
+void blinkPattern(int pin, int times, int delayMs) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(pin, HIGH);  // Turn ON the LED
+    delay(delayMs);           // Wait
+    digitalWrite(pin, LOW);   // Turn OFF the LED
+    delay(delayMs);           // Wait
+  }
+}
+
+// Returns true if at least one lamp is currently ON
+bool anyLampOn() {
+  for (int i = 0; i < numToggles; i++) {
+    if (ledStates[i]) return true;
+  }
+  return false;
+}
+
+// Returns true if all 20 lamps are currently ON
+bool allLampsOn() {
+  for (int i = 0; i < numToggles; i++) {
+    if (!ledStates[i]) return false;
+  }
+  return true;
+}
+
+// Power-On Self-Test (POST): flashes all LEDs in sequence at startup
+void runSelfTest() {
+  Serial.println(F("--- Running LED Self-Test (All 20 Pins) ---"));
+  for (int i = 0; i < numToggles; i++) {
+    Serial.print(F("Testing Button "));
+    Serial.print(i + 1);
+    Serial.print(F(" -> Mega Pin "));
+    Serial.println(ledPins[i]);
+
+    digitalWrite(ledPins[i], HIGH);
+    delay(60);
+    digitalWrite(ledPins[i], LOW);
+  }
+  Serial.println(F("--- Self-Test Complete ---"));
+}
+
+// Helper to turn all lamps ON or OFF
+void setAllLamps(bool state) {
+  if (state) {
+    if (!relayState) {
+      digitalWrite(relayPin, RELAY_ON);
+      relayState = true;
+      Serial.println(F("Relay: ON"));
+    }
+    for (int i = 0; i < numToggles; i++) {
+      digitalWrite(ledPins[i], HIGH);
+      ledStates[i] = true;
+    }
+    Serial.println(F("All 20 lamps turned ON"));
+  } else {
+    for (int i = 0; i < numToggles; i++) {
+      digitalWrite(ledPins[i], LOW);
+      ledStates[i] = false;
+    }
+    if (relayState) {
+      digitalWrite(relayPin, RELAY_OFF);
+      relayState = false;
+      Serial.println(F("Relay: OFF"));
+    }
+    Serial.println(F("All 20 lamps turned OFF"));
+  }
+}
+
+// ================================================================
+// GRAND FINALE CEREMONY SEQUENCE
+// Flow:
+// 1. All LEDs + Relay ON -> hold for 10 seconds.
+// 2. Blackout -> turn OFF all LEDs & Relay for 4 seconds.
+// 3. The Best Part -> automatically turn ON all LEDs one by one in given pin order.
+// 4. Finally -> turn ON Relay (Pin 4).
+// ================================================================
+void triggerCeremonySequence() {
+  if (ceremonyRunning) return;
+  ceremonyRunning = true;
+
+  Serial.println();
+  Serial.println(F("**************************************************"));
+  Serial.println(F("  >>> YATHRA GRAND FINALE CEREMONY ACTIVATED <<<  "));
+  Serial.println(F("**************************************************"));
+
+  // Make sure all 20 LEDs and Relay are solidly ON
+  for (int i = 0; i < numToggles; i++) {
+    digitalWrite(ledPins[i], HIGH);
+    ledStates[i] = true;
+  }
+  digitalWrite(relayPin, RELAY_ON);
+  relayState = true;
+
+  // --------------------------------------------------------------
+  // STAGE 1: All LEDs and Relay ON -> Hold for 10 seconds
+  // --------------------------------------------------------------
+  Serial.println(F("[Stage 1] All 20 LEDs & Relay Pin 4 ON -> Holding for 10 seconds..."));
+  for (int s = 10; s > 0; s--) {
+    Serial.print(F("Holding: "));
+    Serial.print(s);
+    Serial.println(F(" s remaining"));
+    delay(1000);
+  }
+
+  // --------------------------------------------------------------
+  // STAGE 2: Blackout -> Turn OFF all LEDs and Relay for 4 seconds
+  // --------------------------------------------------------------
+  Serial.println(F("[Stage 2] Blackout -> Turning OFF all LEDs and Relay for 4 seconds..."));
+  for (int i = 0; i < numToggles; i++) {
+    digitalWrite(ledPins[i], LOW);
+    ledStates[i] = false;
+  }
+  digitalWrite(relayPin, RELAY_OFF);
+  relayState = false;
+
+  for (int s = 4; s > 0; s--) {
+    Serial.print(F("Blackout: "));
+    Serial.print(s);
+    Serial.println(F(" s remaining"));
+    delay(1000);
+  }
+
+  // --------------------------------------------------------------
+  // STAGE 3: Turn ON all LEDs ONE BY ONE in given pin order
+  // Order: 53, 51, 49, 47, 45, 43, 41, 39, 37, 35, 33, 31, 52, 50, 48, 46, 44, 42, 40, 38
+  // --------------------------------------------------------------
+  Serial.println(F("[Stage 3] Grand Lighting -> Turning ON LEDs one by one in order:"));
+  const int CASCADE_DELAY_MS = 500;  // 500 ms delay between each lamp
+
+  for (int i = 0; i < numToggles; i++) {
+    digitalWrite(ledPins[i], HIGH);
+    ledStates[i] = true;
+
+    Serial.print(F("  -> Lamp "));
+    if (i + 1 < 10) Serial.print(F(" "));
+    Serial.print(i + 1);
+    Serial.print(F(" (Mega Pin "));
+    Serial.print(ledPins[i]);
+    Serial.println(F(") turned ON"));
+
+    delay(CASCADE_DELAY_MS);
+  }
+
+  // --------------------------------------------------------------
+  // STAGE 4: Finally, turn ON Pin 4 (Relay pin)
+  // --------------------------------------------------------------
+  delay(500);
+  digitalWrite(relayPin, RELAY_ON);
+  relayState = true;
+  Serial.println(F("[Stage 4] >> FINALLY: Relay Pin 4 turned ON!"));
+  Serial.println(F("**************************************************"));
+  Serial.println(F("  >>> YATHRA CEREMONY COMPLETED SUCCESSFULLY <<<  "));
+  Serial.println(F("**************************************************"));
+
+  // Flush any incoming serial messages buffered during delays
+  while (Serial1.available()) Serial1.read();
+  while (mySerial.available()) mySerial.read();
+  while (Serial.available()) Serial.read();
+  inputString = "";
+  stringComplete = false;
+
+  ceremonyRunning = false;
+}
+
+void setup() {
+  // 1. Initialize USB Serial (for PC Serial Monitor debugging & testing)
+  Serial.begin(9600);
+
+  // 2. Initialize Hardware Serial1 (Pins 19 RX1 and 18 TX1 on Mega)
+  Serial1.begin(9600);
+
+  // 3. Initialize SoftwareSerial (Pins 10 RX and 11 TX on Mega)
+  mySerial.begin(9600);
+
+  // 4. Relay initialization (starts OFF)
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, RELAY_OFF);
+  relayState = false;
+
+  // 5. Initialize all 20 LED pins as OUTPUT, LOW
+  for (int i = 0; i < numToggles; i++) {
+    pinMode(ledPins[i], OUTPUT);
+    digitalWrite(ledPins[i], LOW);
+  }
+
+  inputString.reserve(64);
+
+  Serial.println();
+  Serial.println(F("=================================================="));
+  Serial.println(F("     PROJECT YATHRA 2026 - ARDUINO MEGA 2560      "));
+  Serial.println(F("=================================================="));
+  Serial.println(F("Listening for commands on:"));
+  Serial.println(F("  1. Hardware Serial1 -> Pin 19 (RX1) / Pin 18 (TX1)"));
+  Serial.println(F("  2. SoftwareSerial   -> Pin 10 (RX)  / Pin 11 (TX)"));
+  Serial.println(F("  3. USB Serial Monitor -> Type 1:ON, ALL:ON, CEREMONY"));
+  Serial.println(F("=================================================="));
+
+  // Run quick startup LED test to verify all pins and LEDs physically work
+  runSelfTest();
+
+  Serial.println(F("Ready to receive commands."));
+}
+
+void loop() {
+  // Read incoming data from any available serial source
+  readIncomingSerial();
+
+  // If a complete line has been received, process it
+  if (stringComplete) {
+    processCommand(inputString);
+
+    // Reset buffer for the next message
+    inputString = "";
+    stringComplete = false;
+  }
+}
+
+// Reads serial data from Hardware Serial1, SoftwareSerial, and USB Serial
+void checkPort(Stream &port, const char* name) {
+  while (port.available() && !stringComplete) {
+    char inChar = (char)port.read();
+    if (inChar == '\n' || inChar == '\r') {
+      if (inputString.length() > 0) {
+        stringComplete = true;
+        activePort = name;
+        break;
+      }
+    } else {
+      if (inputString.length() < 60) {
+        inputString += inChar;
+      }
+    }
+  }
+}
+
+void readIncomingSerial() {
+  checkPort(Serial1, "Hardware Serial1 (Pin 19 RX1)");
+  checkPort(mySerial, "SoftwareSerial (Pin 10 RX)");
+  checkPort(Serial, "USB Serial");
+}
+
+// Process and execute incoming command
+void processCommand(String cmd) {
+  cmd.trim();
+  if (cmd.length() == 0) return;
+
+  Serial.print(F("["));
+  Serial.print(activePort);
+  Serial.print(F("] Received: '"));
+  Serial.print(cmd);
+  Serial.println(F("'"));
+
+  // Check for test utility commands
+  if (cmd.equalsIgnoreCase("TEST")) {
+    runSelfTest();
+    return;
+  }
+  if (cmd.equalsIgnoreCase("CEREMONY") || cmd.equalsIgnoreCase("SHOW") || cmd.equalsIgnoreCase("FINALE")) {
+    triggerCeremonySequence();
+    return;
+  }
+  if (cmd.equalsIgnoreCase("ALL:ON")) {
+    setAllLamps(true);
+    triggerCeremonySequence();
+    return;
+  }
+  if (cmd.equalsIgnoreCase("ALL:OFF")) {
+    setAllLamps(false);
+    return;
+  }
+
+  // Parse toggle command format: <toggleNumber>:<action> (e.g. "1:ON", "11:OFF")
+  int colonIndex = cmd.indexOf(':');
+  if (colonIndex != -1) {
+    int toggleNum = cmd.substring(0, colonIndex).toInt();
+    String action = cmd.substring(colonIndex + 1);
+    action.trim();
+    action.toUpperCase();
+
+    if (toggleNum >= 1 && toggleNum <= numToggles) {
+      int i = toggleNum - 1;
+
+      if (action.indexOf("ON") != -1) {
+        // Activate relay first if not already ON (ensures power is available)
+        if (!relayState) {
+          digitalWrite(relayPin, RELAY_ON);
+          relayState = true;
+          Serial.println(F("Relay: ON (master power engaged)"));
+        }
+
+        // Blink 3 times only if previously OFF
+        if (!ledStates[i]) {
+          blinkPattern(ledPins[i], 3, 150);
+        }
+        digitalWrite(ledPins[i], HIGH);
+        ledStates[i] = true;
+
+        Serial.print(F(">> Lamp "));
+        Serial.print(toggleNum);
+        Serial.print(F(" (Mega Pin "));
+        Serial.print(ledPins[i]);
+        Serial.println(F(") turned ON"));
+
+        // Check if this was the last lamp to turn on -> triggers Grand Finale Ceremony
+        if (allLampsOn()) {
+          triggerCeremonySequence();
+        }
+
+      } else if (action.indexOf("OFF") != -1) {
+        if (ledStates[i]) {
+          blinkPattern(ledPins[i], 3, 150);
+        }
+        digitalWrite(ledPins[i], LOW);
+        ledStates[i] = false;
+
+        Serial.print(F(">> Lamp "));
+        Serial.print(toggleNum);
+        Serial.print(F(" (Mega Pin "));
+        Serial.print(ledPins[i]);
+        Serial.println(F(") turned OFF"));
+
+        // Turn relay OFF if all lamps are now OFF
+        if (!anyLampOn() && relayState) {
+          digitalWrite(relayPin, RELAY_OFF);
+          relayState = false;
+          Serial.println(F("Relay: OFF (all lamps are off)"));
+        }
+      }
+    } else {
+      Serial.print(F("Warning: Invalid lamp number: "));
+      Serial.print(toggleNum);
+      Serial.println(F(" (Must be between 1 and 20)"));
+    }
+  } else {
+    Serial.print(F("Warning: Unrecognized command format: "));
+    Serial.println(cmd);
+  }
+}
